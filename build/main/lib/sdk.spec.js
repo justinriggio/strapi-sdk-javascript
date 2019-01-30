@@ -1,0 +1,433 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
+    result["default"] = mod;
+    return result;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const ava_1 = __importDefault(require("ava"));
+const browser_env_1 = __importDefault(require("browser-env"));
+const sinon = __importStar(require("sinon"));
+const sdk_1 = __importDefault(require("./sdk"));
+const test = ava_1.default;
+test.beforeEach(t => {
+    const strapi = new sdk_1.default('http://strapi-host');
+    t.context = {
+        axiosRequest: sinon.stub(strapi.axios, 'request').resolves({
+            data: {}
+        }),
+        strapi
+    };
+});
+test('Create an instance', t => {
+    t.deepEqual(Object.getOwnPropertyNames(Object.getPrototypeOf(t.context.strapi)), [
+        'constructor',
+        'request',
+        'register',
+        'login',
+        'forgotPassword',
+        'resetPassword',
+        'getProviderAuthenticationUrl',
+        'authenticateProvider',
+        'getEntries',
+        'getEntryCount',
+        'getEntry',
+        'createEntry',
+        'updateEntry',
+        'deleteEntry',
+        'searchFiles',
+        'getFiles',
+        'getFile',
+        'upload',
+        'setToken',
+        'clearToken',
+        'isBrowser'
+    ]);
+    t.deepEqual(Object.getOwnPropertyNames(t.context.strapi), [
+        'axios',
+        'storeConfig'
+    ]);
+    t.deepEqual(t.context.strapi.axios.defaults.baseURL, 'http://strapi-host');
+});
+test.serial('Create an instance with existing token on localStorage', t => {
+    browser_env_1.default(['window']);
+    const globalAny = global;
+    globalAny.window.localStorage = storageMock();
+    const setItem = sinon.spy(globalAny.window.localStorage, 'setItem');
+    globalAny.window.localStorage.setItem('jwt', '"XXX"');
+    const strapi = new sdk_1.default('http://strapi-host', {
+        cookie: false
+    });
+    t.is(strapi.axios.defaults.headers.common.Authorization, 'Bearer XXX');
+    t.true(setItem.calledWith('jwt', '"XXX"'));
+    delete strapi.axios.defaults.headers.common.Authorization;
+    delete globalAny.window;
+});
+test('Create an instance with existing token on cookies', t => {
+    browser_env_1.default(['window', 'document']);
+    const Cookies = require('js-cookie');
+    const globalAny = global;
+    Cookies.set('jwt', 'XXX');
+    // const CookieGet = sinon.spy(Cookies)
+    const strapi = new sdk_1.default('http://strapi-host', {
+        localStorage: false
+    });
+    t.is(strapi.axios.defaults.headers.common.Authorization, 'Bearer XXX');
+    // TODO: Mock Cookies
+    // t.true(CookieGet.calledWith('jwt'));
+    delete strapi.axios.defaults.headers.common.Authorization;
+    delete globalAny.window;
+});
+test.serial('Create an instance without token', t => {
+    browser_env_1.default(['window']);
+    const globalAny = global;
+    const strapi = new sdk_1.default('http://strapi-host', {
+        cookie: false,
+        localStorage: false
+    });
+    t.is(strapi.axios.defaults.headers.common.Authorization, undefined);
+    delete globalAny.window;
+});
+test('Make a request', async (t) => {
+    t.context.axiosRequest.resolves({
+        data: [{ foo: 'bar' }]
+    });
+    const data = await t.context.strapi.request('get', '/foo');
+    t.true(t.context.axiosRequest.calledWithExactly({
+        method: 'get',
+        url: '/foo'
+    }));
+    t.deepEqual(data, [{ foo: 'bar' }]);
+});
+test('Make a request with custom axios config', t => {
+    t.context.strapi.request('get', '/foo', {
+        headers: {
+            foo: 'bar'
+        }
+    });
+    t.true(t.context.axiosRequest.calledWithExactly({
+        headers: {
+            foo: 'bar'
+        },
+        method: 'get',
+        url: '/foo'
+    }));
+});
+test('Catch a network request', async (t) => {
+    t.context.axiosRequest.rejects(new Error('Network Error'));
+    await t.throwsAsync(async () => {
+        await t.context.strapi.request('get', '/foo');
+    }, { message: 'Network Error' });
+});
+test('Catch a request', async (t) => {
+    t.context.axiosRequest.rejects({
+        response: {
+            data: {
+                message: 'error'
+            }
+        }
+    });
+    await t.throwsAsync(async () => {
+        await t.context.strapi.request('get', '/foo');
+    }, { message: 'error' });
+});
+test('Register', async (t) => {
+    t.context.axiosRequest.resolves({
+        data: {
+            jwt: 'foo',
+            user: {}
+        }
+    });
+    const authentication = await t.context.strapi.register('username', 'foo@bar.com', 'password', 'foo', 'bar');
+    t.true(t.context.axiosRequest.calledWithExactly({
+        data: {
+            email: 'foo@bar.com',
+            password: 'password',
+            username: 'username',
+            firstname: 'foo',
+            lastname: 'bar'
+        },
+        method: 'post',
+        url: '/auth/local/register'
+    }));
+    t.deepEqual(authentication, {
+        jwt: 'foo',
+        user: {}
+    });
+});
+test('Login', async (t) => {
+    t.context.axiosRequest.resolves({
+        data: {
+            jwt: 'foo',
+            user: {}
+        }
+    });
+    const authentication = await t.context.strapi.login('identifier', 'password');
+    t.true(t.context.axiosRequest.calledWithExactly({
+        data: {
+            identifier: 'identifier',
+            password: 'password'
+        },
+        method: 'post',
+        url: '/auth/local'
+    }));
+    t.deepEqual(authentication, {
+        jwt: 'foo',
+        user: {}
+    });
+});
+test.serial('Set Authorization header on axios', async (t) => {
+    t.is(t.context.strapi.axios.defaults.headers.common.Authorization, undefined);
+    const setToken = sinon.spy(t.context.strapi, 'setToken');
+    t.context.axiosRequest.resolves({
+        data: {
+            jwt: 'foo',
+            user: {}
+        }
+    });
+    const authentication = await t.context.strapi.login('identifier', 'password');
+    t.true(setToken.calledWithExactly(authentication.jwt));
+    t.is(t.context.strapi.axios.defaults.headers.common.Authorization, 'Bearer foo');
+});
+test('Forgot password', async (t) => {
+    await t.context.strapi.forgotPassword('foo@bar.com', 'https://my-domain.com/reset-password');
+    t.true(t.context.axiosRequest.calledWithExactly({
+        data: {
+            email: 'foo@bar.com',
+            url: 'https://my-domain.com/reset-password'
+        },
+        method: 'post',
+        url: '/auth/forgot-password'
+    }));
+});
+test('Reset password', async (t) => {
+    await t.context.strapi.resetPassword('code', 'password', 'confirm');
+    t.true(t.context.axiosRequest.calledWithExactly({
+        data: {
+            code: 'code',
+            password: 'password',
+            passwordConfirmation: 'confirm'
+        },
+        method: 'post',
+        url: '/auth/reset-password'
+    }));
+});
+test('Provider authentication url', t => {
+    t.is(t.context.strapi.getProviderAuthenticationUrl('facebook'), 'http://strapi-host/connect/facebook');
+});
+test('Provider authentication on Node.js', async (t) => {
+    t.context.axiosRequest.resolves({
+        data: {
+            jwt: 'foo',
+            user: {}
+        }
+    });
+    const authentication = await t.context.strapi.authenticateProvider('facebook', {
+        code: 'XXX'
+    });
+    t.true(t.context.axiosRequest.calledWithExactly({
+        method: 'get',
+        params: {
+            code: 'XXX'
+        },
+        url: '/auth/facebook/callback'
+    }));
+    t.deepEqual(authentication, {
+        jwt: 'foo',
+        user: {}
+    });
+});
+test.serial('Provider authentication on browser', async (t) => {
+    browser_env_1.default(['window'], {
+        url: 'http://localhost?access_token=XXX'
+    });
+    const globalAny = global;
+    globalAny.window.localStorage = storageMock();
+    t.context.axiosRequest.resolves({
+        data: {
+            jwt: 'foo',
+            user: {}
+        }
+    });
+    const authentication = await t.context.strapi.authenticateProvider('github');
+    t.true(t.context.axiosRequest.calledWithExactly({
+        method: 'get',
+        params: {
+            access_token: 'XXX'
+        },
+        url: '/auth/github/callback'
+    }));
+    t.deepEqual(authentication, {
+        jwt: 'foo',
+        user: {}
+    });
+    delete globalAny.window;
+});
+test('Get entries', async (t) => {
+    await t.context.strapi.getEntries('user', {
+        _sort: 'email:asc'
+    });
+    t.true(t.context.axiosRequest.calledWithExactly({
+        method: 'get',
+        params: {
+            _sort: 'email:asc'
+        },
+        url: '/user'
+    }));
+});
+test('Get entry count', async (t) => {
+    await t.context.strapi.getEntryCount('user', {
+        name_contains: 'jack'
+    });
+    t.true(t.context.axiosRequest.calledWithExactly({
+        method: 'get',
+        params: {
+            name_contains: 'jack'
+        },
+        url: '/user/count'
+    }));
+});
+test('Get entry', async (t) => {
+    await t.context.strapi.getEntry('user', 'ID');
+    t.true(t.context.axiosRequest.calledWithExactly({
+        method: 'get',
+        url: '/user/ID'
+    }));
+});
+test('Create entry', async (t) => {
+    await t.context.strapi.createEntry('user', {
+        foo: 'bar'
+    });
+    t.true(t.context.axiosRequest.calledWithExactly({
+        data: {
+            foo: 'bar'
+        },
+        method: 'post',
+        url: '/user'
+    }));
+});
+test('Update entry', async (t) => {
+    await t.context.strapi.updateEntry('user', 'ID', {
+        foo: 'bar'
+    });
+    t.true(t.context.axiosRequest.calledWithExactly({
+        data: {
+            foo: 'bar'
+        },
+        method: 'put',
+        url: '/user/ID'
+    }));
+});
+test('Delete entry', async (t) => {
+    await t.context.strapi.deleteEntry('user', 'ID');
+    t.true(t.context.axiosRequest.calledWithExactly({
+        method: 'delete',
+        url: '/user/ID'
+    }));
+});
+test('Search files', async (t) => {
+    await t.context.strapi.searchFiles('foo');
+    t.true(t.context.axiosRequest.calledWithExactly({
+        method: 'get',
+        url: '/upload/search/foo'
+    }));
+});
+test('Get files', async (t) => {
+    await t.context.strapi.getFiles({
+        _sort: 'size:asc'
+    });
+    t.true(t.context.axiosRequest.calledWithExactly({
+        method: 'get',
+        params: {
+            _sort: 'size:asc'
+        },
+        url: '/upload/files'
+    }));
+});
+test('Get file', async (t) => {
+    await t.context.strapi.getFile('ID');
+    t.true(t.context.axiosRequest.calledWithExactly({
+        method: 'get',
+        url: '/upload/files/ID'
+    }));
+});
+test('Upload file on Node.js', async (t) => {
+    const FormData = require('form-data');
+    const form = new FormData();
+    form.append('files', 'foo', 'file-name.ext');
+    await t.context.strapi.upload(form);
+    t.true(t.context.axiosRequest.calledWithExactly({
+        data: form,
+        method: 'post',
+        url: '/upload'
+    }));
+});
+test.serial('Upload file on Browser', async (t) => {
+    browser_env_1.default(['window']);
+    const globalAny = global;
+    const form = new globalAny.window.FormData();
+    form.append('files', new globalAny.window.Blob(['foo'], { type: 'text/plain' }), 'file-name.ext');
+    await t.context.strapi.upload(form);
+    t.true(t.context.axiosRequest.calledWithExactly({
+        data: form,
+        method: 'post',
+        url: '/upload'
+    }));
+    delete globalAny.window;
+});
+test('Set token', t => {
+    t.is(t.context.strapi.axios.defaults.headers.common.Authorization, undefined);
+    t.context.strapi.setToken('foo');
+    t.is(t.context.strapi.axios.defaults.headers.common.Authorization, 'Bearer foo');
+});
+test('Set token on Node.js', t => {
+    browser_env_1.default(['window', 'document']);
+    // const Cookies = require('js-cookie');
+    const globalAny = global;
+    globalAny.window.localStorage = storageMock();
+    const setItem = sinon.spy(globalAny.window.localStorage, 'setItem');
+    // const CookieSet = sinon.spy(Cookies, 'set')
+    const strapi = new sdk_1.default('http://strapi-host', {
+        cookie: false,
+        localStorage: false
+    });
+    strapi.setToken('XXX');
+    t.is(strapi.axios.defaults.headers.common.Authorization, 'Bearer XXX');
+    t.true(setItem.notCalled);
+    // t.true(CookieSet.notCalled)
+    delete globalAny.window;
+});
+test('Clear token without storage', t => {
+    browser_env_1.default(['window']);
+    const globalAny = global;
+    globalAny.window.localStorage = storageMock();
+    const setItem = sinon.spy(globalAny.window.localStorage, 'setItem');
+    const strapi = new sdk_1.default('http://strapi-host', {
+        cookie: false,
+        localStorage: false
+    });
+    strapi.axios.defaults.headers.common.Authorization = 'Bearer XXX';
+    strapi.clearToken();
+    t.true(setItem.notCalled);
+    t.is(strapi.axios.defaults.headers.common.Authorization, undefined);
+});
+function storageMock() {
+    const storage = {};
+    return {
+        setItem(key, value) {
+            storage[key] = value || '';
+        },
+        getItem(key) {
+            return key in storage ? storage[key] : null;
+        },
+        removeItem(key) {
+            delete storage[key];
+        }
+    };
+}
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoic2RrLnNwZWMuanMiLCJzb3VyY2VSb290IjoiIiwic291cmNlcyI6WyIuLi8uLi8uLi9zcmMvbGliL3Nkay5zcGVjLnRzIl0sIm5hbWVzIjpbXSwibWFwcGluZ3MiOiI7Ozs7Ozs7Ozs7OztBQUFBLDhDQUE2QztBQUM3Qyw4REFBcUM7QUFDckMsNkNBQStCO0FBQy9CLGdEQUEyQjtBQUUzQixNQUFNLElBQUksR0FBRyxhQUdYLENBQUM7QUFFSCxJQUFJLENBQUMsVUFBVSxDQUFDLENBQUMsQ0FBQyxFQUFFO0lBQ2xCLE1BQU0sTUFBTSxHQUFHLElBQUksYUFBTSxDQUFDLG9CQUFvQixDQUFDLENBQUM7SUFDaEQsQ0FBQyxDQUFDLE9BQU8sR0FBRztRQUNWLFlBQVksRUFBRSxLQUFLLENBQUMsSUFBSSxDQUFDLE1BQU0sQ0FBQyxLQUFLLEVBQUUsU0FBUyxDQUFDLENBQUMsUUFBUSxDQUFDO1lBQ3pELElBQUksRUFBRSxFQUFFO1NBQ1QsQ0FBQztRQUNGLE1BQU07S0FDUCxDQUFDO0FBQ0osQ0FBQyxDQUFDLENBQUM7QUFFSCxJQUFJLENBQUMsb0JBQW9CLEVBQUUsQ0FBQyxDQUFDLEVBQUU7SUFDN0IsQ0FBQyxDQUFDLFNBQVMsQ0FDVCxNQUFNLENBQUMsbUJBQW1CLENBQUMsTUFBTSxDQUFDLGNBQWMsQ0FBQyxDQUFDLENBQUMsT0FBTyxDQUFDLE1BQU0sQ0FBQyxDQUFDLEVBQ25FO1FBQ0UsYUFBYTtRQUNiLFNBQVM7UUFDVCxVQUFVO1FBQ1YsT0FBTztRQUNQLGdCQUFnQjtRQUNoQixlQUFlO1FBQ2YsOEJBQThCO1FBQzlCLHNCQUFzQjtRQUN0QixZQUFZO1FBQ1osZUFBZTtRQUNmLFVBQVU7UUFDVixhQUFhO1FBQ2IsYUFBYTtRQUNiLGFBQWE7UUFDYixhQUFhO1FBQ2IsVUFBVTtRQUNWLFNBQVM7UUFDVCxRQUFRO1FBQ1IsVUFBVTtRQUNWLFlBQVk7UUFDWixXQUFXO0tBQ1osQ0FDRixDQUFDO0lBRUYsQ0FBQyxDQUFDLFNBQVMsQ0FBQyxNQUFNLENBQUMs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
