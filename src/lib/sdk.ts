@@ -113,7 +113,9 @@ export default class Strapi {
   public async register(
     username: string,
     email: string,
-    password: string
+    password: string,
+    firstname: string,
+    lastname: string
   ): Promise<Authentication> {
     this.clearToken();
     const authentication: Authentication = await this.request(
@@ -123,7 +125,9 @@ export default class Strapi {
         data: {
           email,
           password,
-          username
+          username,
+          firstname,
+          lastname
         }
       }
     );

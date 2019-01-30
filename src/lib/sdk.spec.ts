@@ -171,7 +171,9 @@ test('Register', async t => {
   const authentication = await t.context.strapi.register(
     'username',
     'foo@bar.com',
-    'password'
+    'password',
+    'foo',
+    'bar'
   );
 
   t.true(
@@ -179,7 +181,9 @@ test('Register', async t => {
       data: {
         email: 'foo@bar.com',
         password: 'password',
-        username: 'username'
+        username: 'username',
+        firstname: 'foo',
+        lastname: 'bar'
       },
       method: 'post',
       url: '/auth/local/register'
