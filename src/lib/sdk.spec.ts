@@ -173,7 +173,9 @@ test('Register', async t => {
     'foo@bar.com',
     'password',
     'foo',
-    'bar'
+    'bar',
+    'Foobar co',
+    'yes'
   );
 
   t.true(
@@ -183,7 +185,9 @@ test('Register', async t => {
         password: 'password',
         username: 'username',
         firstname: 'foo',
-        lastname: 'bar'
+        lastname: 'bar',
+        company: 'Foobar co',
+        optin: 'yes'
       },
       method: 'post',
       url: '/auth/local/register'

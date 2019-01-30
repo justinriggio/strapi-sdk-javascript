@@ -43,7 +43,7 @@ export default class Strapi {
      * @param password
      * @returns Authentication User token and profile
      */
-    register(username: string, email: string, password: string, firstname: string, lastname: string): Promise<Authentication>;
+    register(username: string, email: string, password: string, firstname: string, lastname: string, company: string, optin: string): Promise<Authentication>;
     /**
      * Login by getting an authentication token.
      * @param identifier Can either be an email or a username.

@@ -115,7 +115,9 @@ export default class Strapi {
     email: string,
     password: string,
     firstname: string,
-    lastname: string
+    lastname: string,
+    company: string,
+    optin: string
   ): Promise<Authentication> {
     this.clearToken();
     const authentication: Authentication = await this.request(
@@ -127,7 +129,9 @@ export default class Strapi {
           password,
           username,
           firstname,
-          lastname
+          lastname,
+          company,
+          optin
         }
       }
     );
